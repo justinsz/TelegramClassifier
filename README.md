@@ -43,7 +43,9 @@ python3 main.py
 - Scrapes messages from multiple Telegram channels
 - Classifies messages into threat categories
 - Calculates usefulness scores based on multiple factors
-- Generates detailed Excel reports with formatting
+- Generates detailed CSV reports
+- Automatically filters out informational content (guides, tutorials, lists, etc.)
+- Modular keyword management through separate data file
 
 ## Threat Categories
 
@@ -57,84 +59,75 @@ The system currently classifies messages into the following categories:
 
 ## Scoring System
 
-Messages are scored based on three main dimensions, with scores rounded to 4 decimal places (e.g., 0.1324). Only messages with threat labels receive a score.
+Messages are scored based on two main dimensions, with scores rounded to 4 decimal places (e.g., 0.1324).
 
-### 1. Threat Relevance (50%)
-- **Base Score for Labeled Messages (25%)**: Automatic score for any message with threat labels
-- **Multiple Threat Types Bonus (15%)**: Additional 7.5% per unique threat type (e.g., ransomware + data theft)
-- **Keyword Density (10%)**: Measures the presence of relevant threat keywords
-- **Critical Keywords Bonus**: Additional 10% if message contains critical indicators like:
-  - Zero-day vulnerabilities
-  - Active exploitation
-  - Critical severity
-  - Mass attacks
-  - Emergency patches
-  - Immediate action required
-- **Link Bonus**: Additional 15% if message contains a URL (http:// or https://)
-- **Guide/Tutorial Penalty**: Messages containing "guide", "tutorial", or "how to" are automatically classified as INFO
+### 1. Threat Relevance (70%)
+- **Base Score**: 0.35 for labeled messages, 0.60 for messages with critical indicators
+- **Multiple Threat Types Bonus**: Up to 30% additional score
+- **Keyword Density**: Up to 25% based on matching keywords
+- **Critical Keywords Bonus**: 25% for critical threat indicators
+- **Link Bonus**: 25% if message contains a URL
+- **Technical Vulnerability Scores**:
+  - SQL Injection: 0.75
+  - Remote Code Execution: 0.80
+  - Zero-day: 0.85
+  - Other critical vulnerabilities: 0.75
+- **Severity Multipliers**:
+  - Ransomware with data theft: 1.0
+  - Wiper: 1.0
+  - Ransomware without data theft: 0.9
+  - Data exfiltration: 0.9
+  - DDoS: 0.8
+  - Fraud: 0.7
+  - Defacement: 0.6
 
-### 2. Engagement Score (30%)
-- **Forwards (20%)**: Logarithmic scale based on number of forwards
-  - 1-10 forwards: 0.20 - 0.40
-  - 11-25 forwards: 0.41 - 0.60
-  - 26-50 forwards: 0.61 - 0.80
-  - 50+ forwards: 0.81 - 1.00
-- **Replies (10%)**: Logarithmic scale based on number of replies
-  - 1-5 replies: 0.10 - 0.30
-  - 6-15 replies: 0.31 - 0.60
-  - 16-25 replies: 0.61 - 0.80
-  - 25+ replies: 0.81 - 1.00
+### 2. Engagement Score (20%)
+- **Forwards (70% weight)**:
+  - Logarithmic scale with threshold at 25 forwards
+  - Maximum score of 0.5
+- **Replies (30% weight)**:
+  - Logarithmic scale with threshold at 15 replies
+  - Maximum score of 0.3
 
-### 3. Context Quality (20%)
-- **Message Completeness (10%)**: Checks for key elements:
-  - Who (attacker, group, organization)
-  - What (vulnerability, exploit, attack)
-  - When (discovery, detection time)
-  - Where (affected systems, networks)
-  - Bonus 5% for having all elements
-- **Source Credibility (10%)**: Based on channel reputation
-  - Top-tier sources (e.g., MalwareResearch): 1.0
-  - High-tier sources (e.g., TheHackerNews): 0.9
-  - Standard sources: 0.6
+### Additional Scoring Features
+- **Combined Bonus**: 10% additional score for messages with both high threat relevance (≥0.5) and high engagement (≥0.3)
+- **Critical Threat Minimum**: Messages with critical patterns or indicators are guaranteed a minimum score of 0.55
 
-### Additional Scoring Factors
+### Criticality Levels
+- **CRITICAL**: ≥ 0.55
+- **HIGH**: ≥ 0.35
+- **MEDIUM**: ≥ 0.25
+- **LOW**: ≥ 0.15
+- **INFO**: < 0.15 or informational content
 
-- **High Impact Bonus**: Messages with both high threat relevance (≥0.4) and high engagement (≥0.3) receive an additional 10% bonus
-- **Score Capping**: All individual scores and the final score are capped at 1.0
+## Keyword Management
 
-### Criticality Classification
+Keywords and patterns are managed in `keywords_data.py`, which includes:
+- Threat category keywords
+- Technical vulnerability patterns
+- Critical threat indicators
+- Informational content filters
+- User-generated content patterns
+- Severity weights and thresholds
 
-Based on the usefulness score, messages are classified into the following criticality levels:
+## Output Files
 
-| Criticality | Score Range | Description |
-|-------------|-------------|-------------|
-| CRITICAL    | 0.6000 - 1.0000 | Immediate attention required, high-impact threats |
-| HIGH        | 0.4000 - 0.5999 | Significant threats requiring prompt action |
-| MEDIUM      | 0.3000 - 0.3999 | Important threats that should be monitored |
-| LOW         | 0.2000 - 0.2999 | Minor threats or informational messages |
-| INFO        | 0.0000 - 0.1999 | General information or low-priority updates |
+The system generates the following output files:
 
-The Excel output includes color-coding for criticality levels:
-- CRITICAL: Red
-- HIGH: Light Red
-- MEDIUM: Yellow
-- LOW: Light Green
-- INFO: Blue
+1. `telegram_messages_classified.csv`: Contains all messages with their classifications and scores, sorted by timestamp (newest first)
+2. `telegram_messages_labeled.csv`: Contains only messages that have been classified as threats, sorted by usefulness score (highest first)
+3. `telegram_messages_labeled.xlsx`: Excel version of labeled messages
+4. `telegram_messages_classified.xlsx`: Excel version of all messages
 
-### Output Features
+## Informational Content Filtering
 
-The script generates three sets of output files, each containing the following columns:
-- Channel name
-- Channel username
-- Message ID
-- Timestamp
-- Message text
-- Number of forwards
-- Reply count
-- Threat labels
-- **Matched keywords** (new): Lists all keywords that triggered the classification
-- Usefulness score
-- Criticality level
+The system automatically filters out:
+- Guides and tutorials
+- Educational content
+- Best practices and tips
+- User-generated content
+- Step-by-step instructions
+- General informational resources
 
 ## Requirements
 
@@ -173,45 +166,20 @@ python main.py
 python classify_messages.py
 ```
 
-## Output
+## Output Format
 
-The script generates three sets of output files:
-
-1. **Complete Dataset CSV** (`telegram_messages_classified.csv`):
-   - A simple comma-separated values file containing all messages
-   - Suitable for quick data analysis and processing
-   - Contains both labeled and unlabeled messages
-
-2. **Complete Dataset Excel** (`telegram_messages_classified.xlsx`):
-   - A formatted Excel workbook with all messages
-   - Enhanced features:
-     - Color-coded threat categories
-     - Conditional formatting for usefulness scores
-     - Auto-filtering capabilities
-     - Frozen headers for easy navigation
-
-3. **Labeled Messages Only** (Ranked by Usefulness):
-   - CSV format (`telegram_messages_labeled.csv`):
-     - Contains only messages with identified threat labels
-     - Sorted by usefulness score in descending order
-     - Perfect for focusing on relevant threats
-   
-   - Excel format (`telegram_messages_labeled.xlsx`):
-     - Same data as the labeled CSV but with enhanced formatting
-     - Includes all Excel features of the complete dataset
-     - Prioritized view of threats by usefulness
-
-All files contain the following columns:
+All output files contain the following columns:
 - Channel name
 - Channel username
 - Message ID
 - Timestamp
 - Message text
-- Number of forwards
+- Forwards count
 - Reply count
-- Threat labels
-- Matched keywords
-- Usefulness score
+- Labels (threat categories)
+- Matching keywords
+- Usefulness score (formatted as 0.xxxx)
+- Criticality level
 
 ## Security Note
 
